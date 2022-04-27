@@ -149,7 +149,7 @@ func (s *tcpService) SetTargetIPValidator(targetIPValidator onet.TargetIPValidat
 	s.targetIPValidator = targetIPValidator
 }
 
-func dialTarget(tgtAddr socks.Addr, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator) (onet.DuplexConn, *onet.ConnectionError) {
+func dialTarget(tgtAddr socks.Addr, proxyMetrics *metrics.ProxyMetrics, targetIPValidator onet.TargetIPValidator, marker onet.Marker) (onet.DuplexConn, *onet.ConnectionError) {
 	var ipError *onet.ConnectionError
 	dialer := net.Dialer{Control: func(network, address string, c syscall.RawConn) error {
 		ip, _, _ := net.SplitHostPort(address)
@@ -167,6 +167,7 @@ func dialTarget(tgtAddr socks.Addr, proxyMetrics *metrics.ProxyMetrics, targetIP
 	}
 	tgtTCPConn := tgtConn.(*net.TCPConn)
 	tgtTCPConn.SetKeepAlive(true)
+	marker.MarkSocket(tgtTCPConn)
 	return metrics.MeasureConn(tgtTCPConn, &proxyMetrics.ProxyTarget, &proxyMetrics.TargetProxy), nil
 }
 
@@ -260,7 +261,10 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 			return onet.NewConnectionError("ERR_READ_ADDRESS", "Failed to get target address", err)
 		}
 
-		tgtConn, dialErr := dialTarget(tgtAddr, &proxyMetrics, s.targetIPValidator)
+		clientIP := clientTCPConn.RemoteAddr().(*net.TCPAddr).IP
+		marker := onet.NewMarker(clientIP)
+		marker.MarkSocket(clientTCPConn)
+		tgtConn, dialErr := dialTarget(tgtAddr, &proxyMetrics, s.targetIPValidator, marker)
 		if dialErr != nil {
 			// We don't drain so dial errors and invalid addresses are communicated quickly.
 			return dialErr

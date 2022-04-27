@@ -196,11 +196,16 @@ func (s *udpService) Serve(clientConn net.PacketConn) error {
 					return onetErr
 				}
 
-				udpConn, err := net.ListenPacket("udp", "")
+				udpConn, err := net.ListenUDP("udp", nil)
 				if err != nil {
 					return onet.NewConnectionError("ERR_CREATE_SOCKET", "Failed to create UDP socket", err)
 				}
-				targetConn = nm.Add(clientAddr, clientConn, cipher, udpConn, clientLocation, keyID)
+				var marker onet.Marker
+				if clientUDPAddr, ok := clientAddr.(*net.UDPAddr); ok {
+					marker = onet.NewMarker(clientUDPAddr.IP)
+					marker.MarkSocket(udpConn)
+				}
+				targetConn = nm.Add(clientAddr, clientConn, cipher, udpConn, clientLocation, keyID, marker)
 			} else {
 				clientLocation = targetConn.clientLocation
 
@@ -385,13 +390,13 @@ func (m *natmap) del(key string) net.PacketConn {
 	return nil
 }
 
-func (m *natmap) Add(clientAddr net.Addr, clientConn net.PacketConn, cipher *ss.Cipher, targetConn net.PacketConn, clientLocation, keyID string) *natconn {
+func (m *natmap) Add(clientAddr net.Addr, clientConn net.PacketConn, cipher *ss.Cipher, targetConn net.PacketConn, clientLocation, keyID string, marker onet.Marker) *natconn {
 	entry := m.set(clientAddr.String(), targetConn, cipher, keyID, clientLocation)
 
 	m.metrics.AddUDPNatEntry()
 	m.running.Add(1)
 	go func() {
-		timedCopy(clientAddr, clientConn, entry, keyID, m.metrics)
+		timedCopy(clientAddr, clientConn, entry, keyID, m.metrics, marker)
 		m.metrics.RemoveUDPNatEntry()
 		if pc := m.del(clientAddr.String()); pc != nil {
 			pc.Close()
@@ -419,9 +424,11 @@ func (m *natmap) Close() error {
 // and serializing an IPv6 address from the example range.
 var maxAddrLen int = len(socks.ParseAddr("[2001:db8::1]:12345"))
 
+var clientMu sync.Mutex
+
 // copy from target to client until read timeout
 func timedCopy(clientAddr net.Addr, clientConn net.PacketConn, targetConn *natconn,
-	keyID string, sm metrics.ShadowsocksMetrics) {
+	keyID string, sm metrics.ShadowsocksMetrics, marker onet.Marker) {
 	// pkt is used for in-place encryption of downstream UDP packets, with the layout
 	// [padding?][salt][address][body][tag][extra]
 	// Padding is only used if the address is IPv4.
@@ -475,7 +482,12 @@ func timedCopy(clientAddr net.Addr, clientConn net.PacketConn, targetConn *natco
 			if err != nil {
 				return onet.NewConnectionError("ERR_PACK", "Failed to pack data to client", err)
 			}
+			clientMu.Lock()
+			if clientUDPConn, ok := clientConn.(*net.UDPConn); ok {
+				marker.MarkSocket(clientUDPConn)
+			}
 			proxyClientBytes, err = clientConn.WriteTo(buf, clientAddr)
+			clientMu.Unlock()
 			if err != nil {
 				return onet.NewConnectionError("ERR_WRITE", "Failed to write to client", err)
 			}

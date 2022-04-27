@@ -212,7 +212,7 @@ func setupNAT() (*fakePacketConn, *fakePacketConn, *natconn) {
 	nat := newNATmap(timeout, &natTestMetrics{}, &sync.WaitGroup{})
 	clientConn := makePacketConn()
 	targetConn := makePacketConn()
-	nat.Add(&clientAddr, clientConn, natCipher, targetConn, "ZZ", "key id")
+	nat.Add(&clientAddr, clientConn, natCipher, targetConn, "ZZ", "key id", onet.Marker{})
 	entry := nat.Get(clientAddr.String())
 	return clientConn, targetConn, entry
 }

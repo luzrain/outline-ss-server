@@ -1,8 +1,14 @@
 package net
 
 import (
+	"encoding/binary"
+	"hash/fnv"
 	"io"
+	"log"
 	"net"
+	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // DuplexConn is a net.Conn that allows for closing only the reader or writer end of
@@ -96,4 +102,35 @@ type ConnectionError struct {
 
 func NewConnectionError(status, message string, cause error) *ConnectionError {
 	return &ConnectionError{Status: status, Message: message, Cause: cause}
+}
+
+type Marker struct {
+	mark int
+}
+
+func NewMarker(clientIP net.IP) Marker {
+	if clientIP.To4() != nil {
+		// Place the client IP directly into the mark
+		return Marker{int(binary.BigEndian.Uint32(clientIP))}
+	} else {
+		// Hash the top 48 bits of client IP into the mark.
+		// Each IPv6 customer can receive up to a /48 from their ISP, e.g.
+		// https://www.ripe.net/publications/docs/ripe-690#4-2--prefix-assignment-options
+		top48 := clientIP[:6]
+		hash := fnv.New32a()
+		hash.Write(top48)
+		return Marker{int(hash.Sum32())}
+	}
+}
+
+func (m Marker) MarkSocket(conn syscall.Conn) error {
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
+	return raw.Control(func(fd uintptr) {
+		if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, syscall.SO_MARK, m.mark); err != nil {
+			log.Printf("setsockopt: %v", err)
+		}
+	})
 }
