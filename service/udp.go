@@ -147,7 +147,7 @@ func (s *udpService) Serve(clientConn net.PacketConn) error {
 
 			// An upstream packet should have been read.  Set up the metrics reporting
 			// for this forwarding event.
-			clientLocation := ""
+			clientIp := ""
 			keyID := ""
 			var proxyTargetBytes int
 			var timeToCipher time.Duration
@@ -157,7 +157,7 @@ func (s *udpService) Serve(clientConn net.PacketConn) error {
 					logger.Debugf("UDP Error: %v: %v", connError.Message, connError.Cause)
 					status = connError.Status
 				}
-				s.m.AddUDPPacketFromClient(clientLocation, keyID, status, clientProxyBytes, proxyTargetBytes, timeToCipher)
+				s.m.AddUDPPacketFromClient(clientIp, keyID, status, clientProxyBytes, proxyTargetBytes, timeToCipher)
 			}()
 
 			if err != nil {
@@ -173,12 +173,8 @@ func (s *udpService) Serve(clientConn net.PacketConn) error {
 			var tgtUDPAddr *net.UDPAddr
 			targetConn := nm.Get(clientAddr.String())
 			if targetConn == nil {
-				var locErr error
-				clientLocation, locErr = s.m.GetLocation(clientAddr)
-				if locErr != nil {
-					logger.Warningf("Failed location lookup: %v", locErr)
-				}
-				debugUDPAddr(clientAddr, "Got location \"%s\"", clientLocation)
+				clientIp = s.m.GetIpAddress(clientAddr)
+				debugUDPAddr(clientAddr, "Got location \"%s\"", clientIp)
 
 				ip := clientAddr.(*net.UDPAddr).IP
 				var textData []byte
@@ -200,9 +196,9 @@ func (s *udpService) Serve(clientConn net.PacketConn) error {
 				if err != nil {
 					return onet.NewConnectionError("ERR_CREATE_SOCKET", "Failed to create UDP socket", err)
 				}
-				targetConn = nm.Add(clientAddr, clientConn, cipher, udpConn, clientLocation, keyID)
+				targetConn = nm.Add(clientAddr, clientConn, cipher, udpConn, clientIp, keyID)
 			} else {
-				clientLocation = targetConn.clientLocation
+				clientIp = targetConn.clientIp
 
 				unpackStart := time.Now()
 				textData, err := ss.Unpack(nil, cipherData, targetConn.cipher)
@@ -279,7 +275,7 @@ type natconn struct {
 	keyID  string
 	// We store the client location in the NAT map to avoid recomputing it
 	// for every downstream packet in a UDP-based connection.
-	clientLocation string
+	clientIp string
 	// NAT timeout to apply for non-DNS packets.
 	defaultTimeout time.Duration
 	// Current read deadline of PacketConn.  Used to avoid decreasing the
@@ -357,12 +353,12 @@ func (m *natmap) Get(key string) *natconn {
 	return m.keyConn[key]
 }
 
-func (m *natmap) set(key string, pc net.PacketConn, cipher *ss.Cipher, keyID, clientLocation string) *natconn {
+func (m *natmap) set(key string, pc net.PacketConn, cipher *ss.Cipher, keyID, clientIp string) *natconn {
 	entry := &natconn{
 		PacketConn:     pc,
 		cipher:         cipher,
 		keyID:          keyID,
-		clientLocation: clientLocation,
+		clientIp:       clientIp,
 		defaultTimeout: m.timeout,
 	}
 
@@ -385,8 +381,8 @@ func (m *natmap) del(key string) net.PacketConn {
 	return nil
 }
 
-func (m *natmap) Add(clientAddr net.Addr, clientConn net.PacketConn, cipher *ss.Cipher, targetConn net.PacketConn, clientLocation, keyID string) *natconn {
-	entry := m.set(clientAddr.String(), targetConn, cipher, keyID, clientLocation)
+func (m *natmap) Add(clientAddr net.Addr, clientConn net.PacketConn, cipher *ss.Cipher, targetConn net.PacketConn, clientIp, keyID string) *natconn {
+	entry := m.set(clientAddr.String(), targetConn, cipher, keyID, clientIp)
 
 	m.metrics.AddUDPNatEntry()
 	m.running.Add(1)
@@ -489,6 +485,6 @@ func timedCopy(clientAddr net.Addr, clientConn net.PacketConn, targetConn *natco
 		if expired {
 			break
 		}
-		sm.AddUDPPacketFromTarget(targetConn.clientLocation, keyID, status, bodyLen, proxyClientBytes)
+		sm.AddUDPPacketFromTarget(targetConn.clientIp, keyID, status, bodyLen, proxyClientBytes)
 	}
 }

@@ -19,7 +19,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -32,7 +31,6 @@ import (
 	"github.com/Jigsaw-Code/outline-ss-server/service/metrics"
 	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
 	"github.com/op/go-logging"
-	"github.com/oschwald/geoip2-golang"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/crypto/ssh/terminal"
@@ -214,7 +212,6 @@ func main() {
 	var flags struct {
 		ConfigFile    string
 		MetricsAddr   string
-		IPCountryDB   string
 		natTimeout    time.Duration
 		replayHistory int
 		Verbose       bool
@@ -222,7 +219,6 @@ func main() {
 	}
 	flag.StringVar(&flags.ConfigFile, "config", "", "Configuration filename")
 	flag.StringVar(&flags.MetricsAddr, "metrics", "", "Address for the Prometheus metrics")
-	flag.StringVar(&flags.IPCountryDB, "ip_country_db", "", "Path to the ip-to-country mmdb file")
 	flag.DurationVar(&flags.natTimeout, "udptimeout", defaultNatTimeout, "UDP tunnel timeout")
 	flag.IntVar(&flags.replayHistory, "replay_history", 0, "Replay buffer size (# of handshakes)")
 	flag.BoolVar(&flags.Verbose, "verbose", false, "Enables verbose logging output")
@@ -254,17 +250,8 @@ func main() {
 		logger.Infof("Metrics on http://%v/metrics", flags.MetricsAddr)
 	}
 
-	var ipCountryDB *geoip2.Reader
 	var err error
-	if flags.IPCountryDB != "" {
-		logger.Infof("Using IP-Country database at %v", flags.IPCountryDB)
-		ipCountryDB, err = geoip2.Open(flags.IPCountryDB)
-		if err != nil {
-			log.Fatalf("Could not open geoip database at %v: %v", flags.IPCountryDB, err)
-		}
-		defer ipCountryDB.Close()
-	}
-	m := metrics.NewPrometheusShadowsocksMetrics(ipCountryDB, prometheus.DefaultRegisterer)
+	m := metrics.NewPrometheusShadowsocksMetrics(prometheus.DefaultRegisterer)
 	m.SetBuildInfo(version)
 	_, err = RunSSServer(flags.ConfigFile, flags.natTimeout, m, flags.replayHistory)
 	if err != nil {

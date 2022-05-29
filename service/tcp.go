@@ -213,12 +213,8 @@ func (s *tcpService) Serve(listener *net.TCPListener) error {
 }
 
 func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPConn) {
-	clientLocation, err := s.m.GetLocation(clientTCPConn.RemoteAddr())
-	if err != nil {
-		logger.Warningf("Failed location lookup: %v", err)
-	}
-	logger.Debugf("Got location \"%v\" for IP %v", clientLocation, clientTCPConn.RemoteAddr().String())
-	s.m.AddOpenTCPConnection(clientLocation)
+	clientIp := s.m.GetIpAddress(clientTCPConn.RemoteAddr())
+	logger.Debugf("Got location \"%v\" for IP %v", clientIp, clientTCPConn.RemoteAddr().String())
 
 	connStart := time.Now()
 	clientTCPConn.SetKeepAlive(true)
@@ -228,11 +224,18 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 	clientConn := metrics.MeasureConn(clientTCPConn, &proxyMetrics.ProxyClient, &proxyMetrics.ClientProxy)
 	cipherEntry, clientReader, clientSalt, timeToCipher, keyErr := findAccessKey(clientConn, remoteIP(clientTCPConn), s.ciphers)
 
+	var id string
+	if cipherEntry != nil {
+		id = cipherEntry.ID
+	}
+
+	s.m.AddOpenTCPConnection(clientIp, id)
+
 	connError := func() *onet.ConnectionError {
 		if keyErr != nil {
 			logger.Debugf("Failed to find a valid cipher after reading %v bytes: %v", proxyMetrics.ClientProxy, keyErr)
 			const status = "ERR_CIPHER"
-			s.absorbProbe(listenerPort, clientConn, clientLocation, status, &proxyMetrics)
+			s.absorbProbe(listenerPort, clientConn, clientIp, status, &proxyMetrics)
 			return onet.NewConnectionError(status, "Failed to find a valid cipher", keyErr)
 		}
 
@@ -245,8 +248,8 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 			} else {
 				status = "ERR_REPLAY_CLIENT"
 			}
-			s.absorbProbe(listenerPort, clientConn, clientLocation, status, &proxyMetrics)
-			logger.Debugf(status+": %v in %s sent %d bytes", clientTCPConn.RemoteAddr(), clientLocation, proxyMetrics.ClientProxy)
+			s.absorbProbe(listenerPort, clientConn, clientIp, status, &proxyMetrics)
+			logger.Debugf(status+": %v in %s sent %d bytes", clientTCPConn.RemoteAddr(), clientIp, proxyMetrics.ClientProxy)
 			return onet.NewConnectionError(status, "Replay detected", nil)
 		}
 
@@ -306,22 +309,19 @@ func (s *tcpService) handleConnection(listenerPort int, clientTCPConn *net.TCPCo
 		logger.Debugf("TCP Error: %v: %v", connError.Message, connError.Cause)
 		status = connError.Status
 	}
-	var id string
-	if cipherEntry != nil {
-		id = cipherEntry.ID
-	}
-	s.m.AddClosedTCPConnection(clientLocation, id, status, proxyMetrics, timeToCipher, connDuration)
+
+	s.m.AddClosedTCPConnection(clientIp, id, status, proxyMetrics, timeToCipher, connDuration)
 	clientConn.Close() // Closing after the metrics are added aids integration testing.
 	logger.Debugf("Done with status %v, duration %v", status, connDuration)
 }
 
 // Keep the connection open until we hit the authentication deadline to protect against probing attacks
 // `proxyMetrics` is a pointer because its value is being mutated by `clientConn`.
-func (s *tcpService) absorbProbe(listenerPort int, clientConn io.ReadCloser, clientLocation, status string, proxyMetrics *metrics.ProxyMetrics) {
+func (s *tcpService) absorbProbe(listenerPort int, clientConn io.ReadCloser, clientIp, status string, proxyMetrics *metrics.ProxyMetrics) {
 	_, drainErr := io.Copy(ioutil.Discard, clientConn) // drain socket
 	drainResult := drainErrToString(drainErr)
 	logger.Debugf("Drain error: %v, drain result: %v", drainErr, drainResult)
-	s.m.AddTCPProbe(clientLocation, status, drainResult, listenerPort, *proxyMetrics)
+	s.m.AddTCPProbe(clientIp, status, drainResult, listenerPort, *proxyMetrics)
 }
 
 func drainErrToString(drainErr error) string {
