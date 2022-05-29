@@ -16,6 +16,7 @@ package main
 
 import (
 	"container/list"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -110,12 +111,7 @@ func (s *SSServer) removePort(portNum int) error {
 	return nil
 }
 
-func (s *SSServer) loadConfig(filename string) error {
-	config, err := readConfig(filename)
-	if err != nil {
-		return fmt.Errorf("Failed to read config file %v: %v", filename, err)
-	}
-
+func (s *SSServer) loadConfig(config *Config) error {
 	portChanges := make(map[int]int)
 	portCiphers := make(map[int]*list.List) // Values are *List of *CipherEntry.
 	for _, keyConfig := range config.Keys {
@@ -154,6 +150,19 @@ func (s *SSServer) loadConfig(filename string) error {
 	return nil
 }
 
+func (s *SSServer) loadConfigFile(filename string) error {
+	config := Config{}
+	configData, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	err = yaml.Unmarshal(configData, &config)
+	if err != nil {
+		return fmt.Errorf("Failed to read config file %v: %v", filename, err)
+	}
+	return s.loadConfig(&config)
+}
+
 // Stop serving on all ports.
 func (s *SSServer) Stop() error {
 	for portNum := range s.ports {
@@ -172,7 +181,7 @@ func RunSSServer(filename string, natTimeout time.Duration, sm metrics.Shadowsoc
 		replayCache: service.NewReplayCache(replayHistory),
 		ports:       make(map[int]*ssPort),
 	}
-	err := server.loadConfig(filename)
+	err := server.loadConfigFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load config file %v: %v", filename, err)
 	}
@@ -181,7 +190,7 @@ func RunSSServer(filename string, natTimeout time.Duration, sm metrics.Shadowsoc
 	go func() {
 		for range sigHup {
 			logger.Info("Updating config")
-			if err := server.loadConfig(filename); err != nil {
+			if err := server.loadConfigFile(filename); err != nil {
 				logger.Errorf("Could not reload config: %v", err)
 			}
 		}
@@ -196,16 +205,6 @@ type Config struct {
 		Cipher string
 		Secret string
 	}
-}
-
-func readConfig(filename string) (*Config, error) {
-	config := Config{}
-	configData, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	err = yaml.Unmarshal(configData, &config)
-	return &config, err
 }
 
 func main() {
@@ -250,13 +249,41 @@ func main() {
 		logger.Infof("Metrics on http://%v/metrics", flags.MetricsAddr)
 	}
 
+	var server *SSServer
 	var err error
 	m := metrics.NewPrometheusShadowsocksMetrics(prometheus.DefaultRegisterer)
 	m.SetBuildInfo(version)
-	_, err = RunSSServer(flags.ConfigFile, flags.natTimeout, m, flags.replayHistory)
+	server, err = RunSSServer(flags.ConfigFile, flags.natTimeout, m, flags.replayHistory)
 	if err != nil {
 		logger.Fatal(err)
 	}
+
+	http.HandleFunc("/load-config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		logger.Info("Updating config")
+		var err error
+		var jsonConfig Config
+		err = json.NewDecoder(r.Body).Decode(&jsonConfig)
+		if err != nil {
+			w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
+			logger.Errorf("%s", err.Error())
+			return
+		}
+		err = server.loadConfig(&jsonConfig)
+		if err != nil {
+			w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
+			logger.Errorf("%s", err.Error())
+			return
+		}
+		configByteArray, _ := yaml.Marshal(jsonConfig)
+		err = ioutil.WriteFile(flags.ConfigFile, configByteArray, 0644)
+		if err != nil {
+			w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
+			logger.Errorf("%s", err.Error())
+			return
+		}
+		w.Write([]byte(fmt.Sprintf(`{"success":true,"response":"Loaded %v access keys"}`, len(jsonConfig.Keys))))
+	})
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

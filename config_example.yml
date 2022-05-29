@@ -1,15 +1,13 @@
 keys:
-  - id: user-0
-    port: 8641
-    cipher: chacha20-ietf-poly1305
-    secret: Secret0
-
-  - id: user-1
-    port: 8641
-    cipher: chacha20-ietf-poly1305
-    secret: Secret1
-
-  - id: user-2
-    port: 8641
-    cipher: chacha20-ietf-poly1305
-    secret: Secret2
+- id: user-0112
+  port: 8641
+  cipher: chacha20-ietf-poly1305
+  secret: Secret0
+- id: user-1
+  port: 8641
+  cipher: chacha20-ietf-poly1305
+  secret: Secret1222
+- id: user-2111
+  port: 8641
+  cipher: chacha20-ietf-poly1305
+  secret: Secret2
