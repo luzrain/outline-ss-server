@@ -224,28 +224,28 @@ type probeTestMetrics struct {
 	closeStatus []string
 }
 
-func (m *probeTestMetrics) AddTCPProbe(clientLocation, status, drainResult string, port int, data metrics.ProxyMetrics) {
+func (m *probeTestMetrics) AddTCPProbe(clientIp, status, drainResult string, port int, data metrics.ProxyMetrics) {
 	m.mu.Lock()
 	m.probeData = append(m.probeData, data)
 	m.probeStatus = append(m.probeStatus, status)
 	m.mu.Unlock()
 }
-func (m *probeTestMetrics) AddClosedTCPConnection(clientLocation, accessKey, status string, data metrics.ProxyMetrics, timeToCipher, duration time.Duration) {
+func (m *probeTestMetrics) AddClosedTCPConnection(clientIp, accessKey, status string, data metrics.ProxyMetrics, timeToCipher, duration time.Duration) {
 	m.mu.Lock()
 	m.closeStatus = append(m.closeStatus, status)
 	m.mu.Unlock()
 }
 
-func (m *probeTestMetrics) GetLocation(net.Addr) (string, error) {
-	return "", nil
+func (m *probeTestMetrics) GetIpAddress(net.Addr) string {
+	return ""
 }
 func (m *probeTestMetrics) SetNumAccessKeys(numKeys int, numPorts int) {
 }
-func (m *probeTestMetrics) AddOpenTCPConnection(clientLocation string) {
+func (m *probeTestMetrics) AddOpenTCPConnection(clientIp, accessKey string) {
 }
-func (m *probeTestMetrics) AddUDPPacketFromClient(clientLocation, accessKey, status string, clientProxyBytes, proxyTargetBytes int, timeToCipher time.Duration) {
+func (m *probeTestMetrics) AddUDPPacketFromClient(clientIp, accessKey, status string, clientProxyBytes, proxyTargetBytes int, timeToCipher time.Duration) {
 }
-func (m *probeTestMetrics) AddUDPPacketFromTarget(clientLocation, accessKey, status string, targetProxyBytes, proxyClientBytes int) {
+func (m *probeTestMetrics) AddUDPPacketFromTarget(clientIp, accessKey, status string, targetProxyBytes, proxyClientBytes int) {
 }
 func (m *probeTestMetrics) AddUDPNatEntry()    {}
 func (m *probeTestMetrics) RemoveUDPNatEntry() {}

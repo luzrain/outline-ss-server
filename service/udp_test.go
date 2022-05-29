@@ -91,7 +91,7 @@ func (conn *fakePacketConn) Close() error {
 }
 
 type udpReport struct {
-	clientLocation, accessKey, status  string
+	clientIp, accessKey, status        string
 	clientProxyBytes, proxyTargetBytes int
 }
 
@@ -102,21 +102,21 @@ type natTestMetrics struct {
 	upstreamPackets []udpReport
 }
 
-func (m *natTestMetrics) AddTCPProbe(clientLocation, status, drainResult string, port int, data metrics.ProxyMetrics) {
+func (m *natTestMetrics) AddTCPProbe(clientIp, status, drainResult string, port int, data metrics.ProxyMetrics) {
 }
-func (m *natTestMetrics) AddClosedTCPConnection(clientLocation, accessKey, status string, data metrics.ProxyMetrics, timeToCipher, duration time.Duration) {
+func (m *natTestMetrics) AddClosedTCPConnection(clientIp, accessKey, status string, data metrics.ProxyMetrics, timeToCipher, duration time.Duration) {
 }
-func (m *natTestMetrics) GetLocation(net.Addr) (string, error) {
-	return "", nil
+func (m *natTestMetrics) GetIpAddress(net.Addr) string {
+	return ""
 }
 func (m *natTestMetrics) SetNumAccessKeys(numKeys int, numPorts int) {
 }
-func (m *natTestMetrics) AddOpenTCPConnection(clientLocation string) {
+func (m *natTestMetrics) AddOpenTCPConnection(clientIp, accessKey string) {
 }
-func (m *natTestMetrics) AddUDPPacketFromClient(clientLocation, accessKey, status string, clientProxyBytes, proxyTargetBytes int, timeToCipher time.Duration) {
-	m.upstreamPackets = append(m.upstreamPackets, udpReport{clientLocation, accessKey, status, clientProxyBytes, proxyTargetBytes})
+func (m *natTestMetrics) AddUDPPacketFromClient(clientIp, accessKey, status string, clientProxyBytes, proxyTargetBytes int, timeToCipher time.Duration) {
+	m.upstreamPackets = append(m.upstreamPackets, udpReport{clientIp, accessKey, status, clientProxyBytes, proxyTargetBytes})
 }
-func (m *natTestMetrics) AddUDPPacketFromTarget(clientLocation, accessKey, status string, targetProxyBytes, proxyClientBytes int) {
+func (m *natTestMetrics) AddUDPPacketFromTarget(clientIp, accessKey, status string, targetProxyBytes, proxyClientBytes int) {
 }
 func (m *natTestMetrics) AddUDPNatEntry() {
 	m.natEntriesAdded++
