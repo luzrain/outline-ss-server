@@ -43,6 +43,8 @@ var logger *logging.Logger
 // Set by goreleaser default ldflags. See https://goreleaser.com/customization/build/
 var version = "dev"
 
+var server *SSServer
+
 // 59 seconds is most common timeout for servers that do not respond to invalid requests
 const tcpReadTimeout time.Duration = 59 * time.Second
 
@@ -198,6 +200,15 @@ func RunSSServer(filename string, natTimeout time.Duration, sm metrics.Shadowsoc
 	return server, nil
 }
 
+var flags struct {
+	ConfigFile    string
+	ListenAddress string
+	natTimeout    time.Duration
+	replayHistory int
+	Verbose       bool
+	Version       bool
+}
+
 type Config struct {
 	Keys []struct {
 		ID     string
@@ -208,16 +219,8 @@ type Config struct {
 }
 
 func main() {
-	var flags struct {
-		ConfigFile    string
-		MetricsAddr   string
-		natTimeout    time.Duration
-		replayHistory int
-		Verbose       bool
-		Version       bool
-	}
 	flag.StringVar(&flags.ConfigFile, "config", "", "Configuration filename")
-	flag.StringVar(&flags.MetricsAddr, "metrics", "", "Address for the Prometheus metrics")
+	flag.StringVar(&flags.ListenAddress, "web.listen", "0.0.0.0:8080", "Address for the Prometheus metrics")
 	flag.DurationVar(&flags.natTimeout, "udptimeout", defaultNatTimeout, "UDP tunnel timeout")
 	flag.IntVar(&flags.replayHistory, "replay_history", 0, "Replay buffer size (# of handshakes)")
 	flag.BoolVar(&flags.Verbose, "verbose", false, "Enables verbose logging output")
@@ -241,15 +244,15 @@ func main() {
 		return
 	}
 
-	if flags.MetricsAddr != "" {
-		http.Handle("/metrics", promhttp.Handler())
-		go func() {
-			logger.Fatal(http.ListenAndServe(flags.MetricsAddr, nil))
-		}()
-		logger.Infof("Metrics on http://%v/metrics", flags.MetricsAddr)
-	}
+	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/secrets", LoadSecretsHandler)
+	http.HandleFunc("/reset", ResetHandler)
 
-	var server *SSServer
+	go func() {
+		logger.Fatal(http.ListenAndServe(flags.ListenAddress, nil))
+	}()
+	logger.Infof("Api server has started on http://%v/", flags.ListenAddress)
+
 	var err error
 	m := metrics.NewPrometheusShadowsocksMetrics(prometheus.DefaultRegisterer)
 	m.SetBuildInfo(version)
@@ -258,34 +261,46 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	http.HandleFunc("/load-config", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		logger.Info("Updating config")
-		var err error
-		var jsonConfig Config
-		err = json.NewDecoder(r.Body).Decode(&jsonConfig)
-		if err != nil {
-			w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
-			logger.Errorf("%s", err.Error())
-			return
-		}
-		err = server.loadConfig(&jsonConfig)
-		if err != nil {
-			w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
-			logger.Errorf("%s", err.Error())
-			return
-		}
-		configByteArray, _ := yaml.Marshal(jsonConfig)
-		err = ioutil.WriteFile(flags.ConfigFile, configByteArray, 0644)
-		if err != nil {
-			w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
-			logger.Errorf("%s", err.Error())
-			return
-		}
-		w.Write([]byte(fmt.Sprintf(`{"success":true,"response":"Loaded %v access keys"}`, len(jsonConfig.Keys))))
-	})
-
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
+}
+
+func LoadSecretsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	logger.Info("Updating config")
+	var err error
+	var jsonConfig Config
+	err = json.NewDecoder(r.Body).Decode(&jsonConfig)
+	if err != nil {
+		w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
+		logger.Errorf("%s", err.Error())
+		return
+	}
+	err = server.loadConfig(&jsonConfig)
+	if err != nil {
+		w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
+		logger.Errorf("%s", err.Error())
+		return
+	}
+	configByteArray, _ := yaml.Marshal(jsonConfig)
+	err = ioutil.WriteFile(flags.ConfigFile, configByteArray, 0644)
+	if err != nil {
+		w.Write([]byte(fmt.Sprintf(`{"success":false,"error":"%v"}`, err)))
+		logger.Errorf("%s", err.Error())
+		return
+	}
+	w.Write([]byte(fmt.Sprintf(`{"success":true,"response":"Loaded %v access keys"}`, len(jsonConfig.Keys))))
+}
+
+func ResetHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"success":true,"response":"ok"}`))
+	go reset()
+}
+
+func reset() {
+	time.Sleep(100 * time.Millisecond)
+	logger.Info("Server has resetted")
+	os.Exit(1)
 }
