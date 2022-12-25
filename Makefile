@@ -1,6 +1,6 @@
 .PHONY: build
 build:
-	go build -ldflags "-s -w" -o outline-ss-server server.go
+	go build -ldflags "-s -w" -o outline-ss-server cmd/outline-ss-server/main.go
 
 .PHONY: install
 install:

@@ -3,7 +3,7 @@ module github.com/Jigsaw-Code/outline-ss-server
 require (
 	github.com/goreleaser/goreleaser v1.12.3
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
-	github.com/prometheus/client_golang v1.8.0
+	github.com/prometheus/client_golang v1.12.2
 	github.com/shadowsocks/go-shadowsocks2 v0.1.4-0.20201002022019-75d43273f5a5
 	github.com/stretchr/testify v1.8.0
 	golang.org/x/crypto v0.1.0
@@ -131,7 +131,6 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/roff v0.1.0 // indirect
 	github.com/muesli/termenv v0.13.0 // indirect
-	github.com/oschwald/maxminddb-golang v1.10.0 // indirect
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

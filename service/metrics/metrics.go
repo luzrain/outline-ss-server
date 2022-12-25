@@ -34,7 +34,7 @@ type ShadowsocksMetrics interface {
 	SetNumAccessKeys(numKeys int, numPorts int)
 
 	// TCP metrics
-	AddOpenTCPConnection(clientIp string)
+	AddOpenTCPConnection(clientIp, accessKey string)
 	AddClosedTCPConnection(clientIp, accessKey, status string, data ProxyMetrics, timeToCipher, duration time.Duration)
 	AddTCPProbe(status, drainResult string, port int, data ProxyMetrics)
 
@@ -124,8 +124,8 @@ func newShadowsocksMetrics() *shadowsocksMetrics {
 		dataBytesPerLocation: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: "shadowsocks",
-				Name:      "data_bytes_per_location",
-				Help:      "Bytes transferred by the proxy, per location",
+				Name:      "data_bytes_per_ip",
+				Help:      "Bytes transferred by the proxy, per ip",
 			}, []string{"dir", "proto", "ip"}),
 		timeToCipherMs: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
