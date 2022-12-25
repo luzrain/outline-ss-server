@@ -15,3 +15,12 @@
 
 # goreleaser temporary files.
 /dist/
+
+# Tools
+/bin/
+
+# Git submodules
+/third_party/maxmind/
+
+# Prometheus
+/data/

@@ -32,4 +32,4 @@ To avoid this class of attacks, outline-ss-server uses an [HMAC](https://en.wiki
 
 ## Metrics
 
-Outline provides server operators with metrics on a variety of aspects of server activity, including any detected attacks.  To observe attacks detected by your server, look at the `tcp_probes` histogram vector in Prometheus.  The `status` field will be `"ERR_CIPHER"` (indicating invalid probe data), `"ERR_REPLAY_CLIENT"`, or `"ERR_REPLAY_SERVER"`, depending on the kind of attack your server observed.  You can also see what country each probe appeared to originate from, and approximately how many bytes were sent before giving up.
+Outline provides server operators with metrics on a variety of aspects of server activity, including any detected attacks.  To observe attacks detected by your server, look at the `tcp_probes` histogram vector in Prometheus.  The `status` field will be `"ERR_CIPHER"` (indicating invalid probe data), `"ERR_REPLAY_CLIENT"`, or `"ERR_REPLAY_SERVER"`, depending on the kind of attack your server observed.  You can also see approximately how many bytes were sent before giving up.

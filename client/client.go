@@ -6,9 +6,9 @@ import (
 	"net"
 	"time"
 
+	"github.com/Jigsaw-Code/outline-ss-server/internal/slicepool"
 	onet "github.com/Jigsaw-Code/outline-ss-server/net"
 	ss "github.com/Jigsaw-Code/outline-ss-server/shadowsocks"
-	"github.com/Jigsaw-Code/outline-ss-server/slicepool"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 )
 
@@ -28,6 +28,11 @@ type Client interface {
 	// ListenUDP relays UDP packets though a Shadowsocks proxy.
 	// `laddr` is a local bind address, a local address is automatically chosen if nil.
 	ListenUDP(laddr *net.UDPAddr) (net.PacketConn, error)
+
+	// SetTCPSaltGenerator controls the SaltGenerator used for TCP upstream.
+	// `salter` may be `nil`.
+	// This method is not thread-safe.
+	SetTCPSaltGenerator(ss.SaltGenerator)
 }
 
 // NewClient creates a client that routes connections to a Shadowsocks proxy listening at
@@ -51,6 +56,11 @@ type ssClient struct {
 	proxyIP   net.IP
 	proxyPort int
 	cipher    *ss.Cipher
+	salter    ss.SaltGenerator
+}
+
+func (c *ssClient) SetTCPSaltGenerator(salter ss.SaltGenerator) {
+	c.salter = salter
 }
 
 // This code contains an optimization to send the initial client payload along with
@@ -76,6 +86,9 @@ func (c *ssClient) DialTCP(laddr *net.TCPAddr, raddr string) (onet.DuplexConn, e
 		return nil, err
 	}
 	ssw := ss.NewShadowsocksWriter(proxyConn, c.cipher)
+	if c.salter != nil {
+		ssw.SetSaltGenerator(c.salter)
+	}
 	_, err = ssw.LazyWrite(socksTargetAddr)
 	if err != nil {
 		proxyConn.Close()
@@ -143,7 +156,7 @@ func (c *packetConn) ReadFrom(b []byte) (int, net.Addr, error) {
 	if socksSrcAddr == nil {
 		return 0, nil, errors.New("Failed to read source address")
 	}
-	srcAddr := NewAddr(socksSrcAddr.String(), "udp")
+	srcAddr := newAddr(socksSrcAddr.String(), "udp")
 	n = copy(b, buf[len(socksSrcAddr):]) // Strip the SOCKS source address
 	if len(b) < len(buf)-len(socksSrcAddr) {
 		return n, srcAddr, io.ErrShortBuffer
@@ -164,8 +177,8 @@ func (a *addr) Network() string {
 	return a.network
 }
 
-// NewAddr returns a net.Addr that holds an address of the form `host:port` with a domain name or IP as host.
+// newAddr returns a net.Addr that holds an address of the form `host:port` with a domain name or IP as host.
 // Used for SOCKS addressing.
-func NewAddr(address, network string) net.Addr {
+func newAddr(address, network string) net.Addr {
 	return &addr{address: address, network: network}
 }

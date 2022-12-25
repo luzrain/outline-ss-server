@@ -16,9 +16,9 @@ func TestMethodsDontPanic(t *testing.T) {
 		ProxyClient: 4,
 	}
 	ssMetrics.SetNumAccessKeys(20, 2)
-	ssMetrics.AddOpenTCPConnection("127.0.0.1", "1")
+	ssMetrics.AddOpenTCPConnection("127.0.0.1")
 	ssMetrics.AddClosedTCPConnection("127.0.0.1", "1", "OK", proxyMetrics, 10*time.Millisecond, 100*time.Millisecond)
-	ssMetrics.AddTCPProbe("127.0.0.1", "ERR_CIPHER", "eof", 443, proxyMetrics)
+	ssMetrics.AddTCPProbe("ERR_CIPHER", "eof", 443, proxyMetrics)
 	ssMetrics.AddUDPPacketFromClient("127.0.0.1", "2", "OK", 10, 20, 10*time.Millisecond)
 	ssMetrics.AddUDPPacketFromTarget("127.0.0.1", "3", "OK", 10, 20)
 	ssMetrics.AddUDPNatEntry()
@@ -48,15 +48,14 @@ func BenchmarkCloseTCP(b *testing.B) {
 }
 
 func BenchmarkProbe(b *testing.B) {
-	ssMetrics := NewPrometheusShadowsocksMetrics(prometheus.NewRegistry())
-	clientIp := "127.0.0.1"
+	ssMetrics := NewPrometheusShadowsocksMetrics(nil, prometheus.NewRegistry())
 	status := "ERR_REPLAY"
 	drainResult := "other"
 	port := 12345
 	data := ProxyMetrics{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ssMetrics.AddTCPProbe(clientIp, status, drainResult, port, data)
+		ssMetrics.AddTCPProbe(status, drainResult, port, data)
 	}
 }
 

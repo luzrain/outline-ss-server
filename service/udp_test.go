@@ -28,6 +28,7 @@ import (
 	logging "github.com/op/go-logging"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const timeout = 5 * time.Minute
@@ -102,7 +103,7 @@ type natTestMetrics struct {
 	upstreamPackets []udpReport
 }
 
-func (m *natTestMetrics) AddTCPProbe(clientIp, status, drainResult string, port int, data metrics.ProxyMetrics) {
+func (m *natTestMetrics) AddTCPProbe(status, drainResult string, port int, data metrics.ProxyMetrics) {
 }
 func (m *natTestMetrics) AddClosedTCPConnection(clientIp, accessKey, status string, data metrics.ProxyMetrics, timeToCipher, duration time.Duration) {
 }
@@ -295,6 +296,7 @@ func TestNATFastClose(t *testing.T) {
 	query := []byte{1}
 	entry.WriteTo(query, &dnsAddr)
 	sent := <-targetConn.send
+	require.Len(t, sent.payload, 1)
 	// Send the response.
 	response := []byte{1, 2, 3, 4, 5}
 	received := packet{addr: &dnsAddr, payload: response}
@@ -321,6 +323,7 @@ func TestNATNoFastClose_NotDNS(t *testing.T) {
 	query := []byte{1}
 	entry.WriteTo(query, &targetAddr)
 	sent := <-targetConn.send
+	require.Len(t, sent.payload, 1)
 	// Send the response.
 	response := []byte{1, 2, 3, 4, 5}
 	received := packet{addr: &targetAddr, payload: response}
@@ -451,6 +454,7 @@ func BenchmarkUDPUnpackSharedKey(b *testing.B) {
 	snapshot := cipherList.SnapshotForClientIP(nil)
 	cipher := snapshot[0].Value.(*CipherEntry).Cipher
 	packet, err := ss.Pack(make([]byte, serverUDPBufferSize), plaintext, cipher)
+	require.Nil(b, err)
 
 	const numIPs = 100 // Must be <256
 	ips := [numIPs]net.IP{}
